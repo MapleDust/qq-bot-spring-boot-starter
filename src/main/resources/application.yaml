@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: qq-bot-spring-boot-starter
+qq:
+  bot:
+    app-id:
+    app-secret:
