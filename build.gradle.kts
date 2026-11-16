@@ -33,16 +33,15 @@ dependencies {
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
 
-    // log4j2
-    implementation("org.apache.logging.log4j:log4j-api")
-    implementation("org.apache.logging.log4j:log4j-core")
-    runtimeOnly("org.apache.logging.log4j:log4j-slf4j-impl")
-
     // http client，用来拉 gateway、发送消息
     implementation("org.springframework.boot:spring-boot-starter-webflux")
 
     // validation
     compileOnly("jakarta.validation:jakarta.validation-api")
+
+    // test
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.withType<Test> {

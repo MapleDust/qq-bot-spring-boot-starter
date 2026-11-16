@@ -5,3 +5,8 @@ qq:
   bot:
     app-id:
     app-secret:
+    # 事件订阅位掩码，33554432 = 1 << 25 (GROUP_AND_C2C_EVENT)
+    # 覆盖：单聊 C2C_MESSAGE_CREATE、群聊@机器人 GROUP_AT_MESSAGE_CREATE、群聊全量 GROUP_MESSAGE_CREATE
+    intents: 33554432
+    # 演示监听器：群内 @机器人 /ping 回 pong，私聊消息回显（生产请设为 false 或删除）
+    demo-listener: true

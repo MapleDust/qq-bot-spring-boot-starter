@@ -1,10 +1,10 @@
 package top.fcidd.qqbot.starter.autoconfigure;
 
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 
-@Log4j2
+@Slf4j
 public class QQBotStarterBootstrap {
     private final QQBotWebSocketClient webSocketClient;
     private final QQBotProperties properties;
