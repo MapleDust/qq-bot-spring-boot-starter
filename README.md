@@ -2,7 +2,44 @@
 
 基于 QQ 机器人 API v2 的 Spring Boot Starter：WebSocket 网关接入、消息日志、注解式消息监听、消息发送封装。
 
-## 一、配置
+[![Maven Central](https://img.shields.io/maven-central/v/top.fcidd/qq-bot-spring-boot-starter?label=Maven%20Central)](https://central.sonatype.com/artifact/top.fcidd/qq-bot-spring-boot-starter)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Java](https://img.shields.io/badge/Java-25%2B-orange.svg)](https://openjdk.org/projects/jdk/25/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1%2B-6DB33F.svg)](https://spring.io/projects/spring-boot)
+
+## 一、安装
+
+已发布到 Maven Central，坐标 `top.fcidd:qq-bot-spring-boot-starter`。
+
+**Gradle（Kotlin DSL）**
+
+```kotlin
+dependencies {
+    implementation("top.fcidd:qq-bot-spring-boot-starter:1.1.0")
+}
+```
+
+**Gradle（Groovy）**
+
+```groovy
+dependencies {
+    implementation 'top.fcidd:qq-bot-spring-boot-starter:1.1.0'
+}
+```
+
+**Maven**
+
+```xml
+<dependency>
+    <groupId>top.fcidd</groupId>
+    <artifactId>qq-bot-spring-boot-starter</artifactId>
+    <version>1.1.0</version>
+</dependency>
+```
+
+环境要求：**JDK 25+**、**Spring Boot 4.1.x**。starter 通过 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 自动装配，引入依赖后无需额外注解即可生效；全部版本可在 [Maven Central](https://central.sonatype.com/artifact/top.fcidd/qq-bot-spring-boot-starter/versions) 查看。
+
+## 二、配置
 
 ```yaml
 qq:
@@ -18,7 +55,7 @@ qq:
 
 应用启动后会自动拉取 access_token、连接 gateway、鉴权并在日志中打出 `收到 READY`。
 
-## 二、注解式监听
+## 三、注解式监听
 
 ```java
 @QQBotListener                       // 标记监听器类，会被组件扫描注册
@@ -77,7 +114,7 @@ public class MyBotListener {
 
 处理器在弹性线程池（`boundedElastic`）中执行，方法内可以安全地做阻塞调用。
 
-## 三、发送消息
+## 四、发送消息
 
 注入 `QQBotMessageSender` 即可：
 
@@ -126,7 +163,7 @@ public class MyService {
 - 同一 `msg_id` 可能被平台重复推送，回复时建议自行按 `msg_id` 去重。
 - 群聊全量消息 `GROUP_MESSAGE_CREATE` 只在群主给机器人开启「获取群内全部消息」后才会推送，排查方法见下一节。
 
-## 四、群全量消息收不到怎么排查
+## 五、群全量消息收不到怎么排查
 
 `GROUP_MESSAGE_CREATE` 与 `GROUP_AT_MESSAGE_CREATE` 共用同一个 intent（`GROUP_AND_C2C_EVENT 1<<25`），代码不需要额外订阅；收不到几乎都是 QQ 群侧开关没开。
 
@@ -163,7 +200,7 @@ boolean receiveAll = groupApi.isReceiveAllMessages("群openid");
 
 对应接口 `GET /v2/groups/{group_openid}/bot_state`，`recv_msg_setting` 取值：`all`（群内全部消息）、`only_mention`（仅 @机器人）、`mention_and_context`（@机器人及上下文）。该接口部分机器人需要白名单权限，返回 `11253 应用无接口访问权限` 时只能靠第一步的开关状态判断。
 
-## 五、日志
+## 六、日志
 
 收到三类消息事件时会打印明细（INFO）：
 
@@ -174,7 +211,7 @@ boolean receiveAll = groupApi.isReceiveAllMessages("群openid");
 
 附件 URL 带鉴权参数，所以日志只打印类型/文件名/尺寸/大小，不落 URL。
 
-## 六、其它
+## 七、其它
 
 - 网关事件仍会通过 `ApplicationEventPublisher` 发布 `BotEvent`，需要原始事件时可 `@EventListener` 监听。
 - 内置 `DemoBotListener` 仅在 `qq.bot.demo-listener=true` 时启用：群内 `/ping` 回 `pong`，私聊回显，用于自测链路。
