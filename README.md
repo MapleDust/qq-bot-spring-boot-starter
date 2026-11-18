@@ -37,7 +37,27 @@ dependencies {
 </dependency>
 ```
 
-环境要求：**JDK 25+**、**Spring Boot 4.1.x**。starter 通过 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 自动装配，引入依赖后无需额外注解即可生效；全部版本可在 [Maven Central](https://central.sonatype.com/artifact/top.fcidd/qq-bot-spring-boot-starter/versions) 查看。
+环境要求：**JDK 25+**、**Spring Boot 4.1.x**。starter 通过 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 自动装配，全部版本可在 [Maven Central](https://central.sonatype.com/artifact/top.fcidd/qq-bot-spring-boot-starter/versions) 查看。
+
+### 在启动类上添加 `@EnableQQBot`
+
+引入依赖后，**需要在 Spring Boot 启动类上添加 `@EnableQQBot`**，显式启用 QQ 机器人自动装配（导入 `QQBotAutoConfiguration`，注册网关客户端、事件处理、消息发送、注解监听等全部 Bean）：
+
+```java
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import top.fcidd.qqbot.starter.annotation.EnableQQBot;
+
+@SpringBootApplication
+@EnableQQBot                     // 必须：启用 QQ 机器人自动装配
+public class Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+```
+
+不加该注解时，若自动装配未生效，网关不会连接、消息监听不会生效（日志中看不到 `收到 READY`）。
 
 ## 二、配置
 
@@ -56,6 +76,8 @@ qq:
 应用启动后会自动拉取 access_token、连接 gateway、鉴权并在日志中打出 `收到 READY`。
 
 ## 三、注解式监听
+
+前提：启动类已添加 `@EnableQQBot`。
 
 ```java
 @QQBotListener                       // 标记监听器类，会被组件扫描注册
