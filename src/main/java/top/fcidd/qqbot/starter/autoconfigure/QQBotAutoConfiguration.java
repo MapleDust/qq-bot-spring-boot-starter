@@ -1,6 +1,6 @@
 package top.fcidd.qqbot.starter.autoconfigure;
 
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -20,7 +20,7 @@ import top.fcidd.qqbot.starter.sender.QQBotMessageSender;
  * <p>
  * 提供网关连接、消息日志、消息发送封装、注解监听器分发等能力。
  */
-@Slf4j
+@Log4j2
 @Configuration
 @EnableConfigurationProperties(QQBotProperties.class)
 @ConditionalOnProperty(prefix = "qq.bot", name = "app-id", matchIfMissing = false)
@@ -79,6 +79,7 @@ public class QQBotAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
     public EventHandler eventHandler(ApplicationEventPublisher publisher,
                                      MessageEventLogger messageEventLogger,
                                      MessageEventDispatcher messageEventDispatcher) {
@@ -86,6 +87,7 @@ public class QQBotAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
     public QQBotWebSocketClient qqBotWebSocketClient(QQBotProperties props,
                                                      EventHandler handler,
                                                      AccessTokenProvider tokenProvider) {

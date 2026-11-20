@@ -44,6 +44,18 @@ public class MessageUser {
     @JsonProperty("member_role")
     private String memberRole;
 
+    /** 群内昵称（群聊场景） */
+    @JsonProperty("member_nickname")
+    private String memberNickname;
+
+    /** mentions 专用：是否是 @ 的当前机器人 */
+    @JsonProperty("is_you")
+    private Boolean isYou;
+
+    /** mentions 专用：all=@全体成员，single=@指定对象 */
+    @JsonProperty("scope")
+    private String scope;
+
     /** 用于日志展示的用户标识：优先昵称，其次 openid */
     public String displayName() {
         if (username != null && !username.isBlank()) {

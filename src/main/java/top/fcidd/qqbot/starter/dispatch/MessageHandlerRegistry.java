@@ -1,6 +1,6 @@
 package top.fcidd.qqbot.starter.dispatch;
 
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.ClassUtils;
@@ -25,7 +25,7 @@ import java.util.Map;
  * 扫描 {@link QQBotListener} 类中被注解标记的方法，构建消息事件 -> 处理器映射表。
  * 首次投递事件时惰性初始化（此时容器已完全就绪）。
  */
-@Slf4j
+@Log4j2
 public class MessageHandlerRegistry {
 
     private final ApplicationContext applicationContext;

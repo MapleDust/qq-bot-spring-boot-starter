@@ -1,6 +1,6 @@
 package top.fcidd.qqbot.starter.event;
 
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import top.fcidd.qqbot.starter.model.message.ArkData;
 import top.fcidd.qqbot.starter.model.message.C2CMessagePayload;
 import top.fcidd.qqbot.starter.model.message.GroupMessagePayload;
@@ -23,7 +23,7 @@ import java.util.StringJoiner;
  *     <li>GROUP_MESSAGE_CREATE — 群聊全量消息（群主开启“接收所有消息”后）</li>
  * </ul>
  */
-@Slf4j
+@Log4j2
 public class MessageEventLogger {
 
     public static final String GROUP_AT_MESSAGE_CREATE = "GROUP_AT_MESSAGE_CREATE";
@@ -83,10 +83,10 @@ public class MessageEventLogger {
                 case GROUP_DEL_ROBOT -> formatGroupStatus(event, "机器人被移出群");
                 case GROUP_MSG_RECEIVE -> formatGroupStatus(event, "群消息接收开关：开启");
                 case GROUP_MSG_REJECT -> formatGroupStatus(event, "群消息接收开关：关闭");
-                case GROUP_AT_MESSAGE_CREATE -> formatGroupMessage(event,
-                        JsonUtils.convert(event.getD(), GroupMessagePayload.class), "群聊@机器人");
-                case GROUP_MESSAGE_CREATE -> formatGroupMessage(event,
-                        JsonUtils.convert(event.getD(), GroupMessagePayload.class), "群聊全量消息");
+                case GROUP_AT_MESSAGE_CREATE -> formatGroupMessage(event, eventType,
+                        JsonUtils.convert(event.getD(), GroupMessagePayload.class));
+                case GROUP_MESSAGE_CREATE -> formatGroupMessage(event, eventType,
+                        JsonUtils.convert(event.getD(), GroupMessagePayload.class));
                 case C2C_MESSAGE_CREATE -> formatC2C(event,
                         JsonUtils.convert(event.getD(), C2CMessagePayload.class));
                 default -> null;
@@ -122,11 +122,18 @@ public class MessageEventLogger {
                 + " 群openid=" + groupOpenid;
     }
 
-    private String formatGroupMessage(BotEvent event, GroupMessagePayload payload, String sceneLabel) {
+    private String formatGroupMessage(BotEvent event, String eventType, GroupMessagePayload payload) {
         if (payload == null) {
             return null;
         }
-        return "[" + sceneLabel + "]"
+        // 全量模式下 @机器人 的消息也走 GROUP_MESSAGE_CREATE，因此场景要按“是否 @ 机器人”判断，
+        // 不能只看事件名，否则 @消息会被当成群全量消息
+        boolean fromAtEvent = GROUP_AT_MESSAGE_CREATE.equals(eventType);
+        boolean atBot = fromAtEvent || payload.mentionsBot();
+        String sceneLabel = atBot ? "群聊@机器人" : "群聊全量消息";
+        String sceneNote = atBot && !fromAtEvent ? "（全量模式下收到，按@机器人处理）" : "";
+        return "[" + sceneLabel + "]" + sceneNote
+                + " 事件类型=" + eventType
                 + " 事件ID=" + event.getId()
                 + " 序号s=" + event.getS()
                 + " 消息ID=" + payload.getId()
@@ -229,11 +236,13 @@ public class MessageEventLogger {
             return "无";
         }
         List<String> items = new ArrayList<>();
-        for (int i = 0; i < attachments.size() && i < MAX_ATTACHMENTS_LOGGED; i++) {
+        int printed = 0;
+        for (int i = 0; i < attachments.size() && printed < MAX_ATTACHMENTS_LOGGED; i++) {
             MessageAttachment attachment = attachments.get(i);
             if (attachment == null) {
                 continue;
             }
+            printed++;
             StringJoiner joiner = new StringJoiner(" ");
             joiner.add(attachment.getContentType() == null ? "未知类型" : attachment.getContentType());
             if (attachment.getFilename() != null && !attachment.getFilename().isBlank()) {
@@ -257,7 +266,7 @@ public class MessageEventLogger {
         String suffix = attachments.size() > MAX_ATTACHMENTS_LOGGED
                 ? "…共" + attachments.size() + "个"
                 : "";
-        return items.size() + "个" + String.join(" ", items) + suffix;
+        return printed + "个" + String.join(" ", items) + suffix;
     }
 
     private String describeMentions(List<MessageUser> mentions) {
@@ -268,7 +277,7 @@ public class MessageEventLogger {
         for (int i = 0; i < mentions.size() && i < MAX_MENTIONS_LOGGED; i++) {
             MessageUser mention = mentions.get(i);
             if (mention != null) {
-                names.add(mention.displayName());
+                names.add(Boolean.TRUE.equals(mention.getIsYou()) ? mention.displayName() + "(@我)" : mention.displayName());
             }
         }
         String suffix = mentions.size() > MAX_MENTIONS_LOGGED

@@ -1,6 +1,6 @@
 package top.fcidd.qqbot.starter.demo;
 
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import top.fcidd.qqbot.starter.annotation.C2CMessage;
 import top.fcidd.qqbot.starter.annotation.GroupAtMessage;
@@ -14,7 +14,7 @@ import top.fcidd.qqbot.starter.model.message.C2CMessagePayload;
  * 群内 @机器人 发送 {@code /ping} 回复 {@code pong}；
  * 私聊消息原样回显，用于验证「注解监听 + 自动回复」链路。
  */
-@Slf4j
+@Log4j2
 @QQBotListener
 @ConditionalOnProperty(prefix = "qq.bot", name = "demo-listener", havingValue = "true")
 public class DemoBotListener {

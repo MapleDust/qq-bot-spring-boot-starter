@@ -58,4 +58,29 @@ public class GroupMessagePayload {
     /** 消息元素列表 */
     @JsonProperty("msg_elements")
     private List<MsgElement> msgElements;
+
+    /**
+     * 这条消息是否 @ 了当前机器人。
+     * <p>
+     * 全量模式（GROUP_MESSAGE_CREATE）下，群内每条消息都会推送，@机器人 的消息也在其中，
+     * 平台通过 {@code mentions[].is_you=true} 标记“就是 @ 的当前 bot”，据此把 @消息从全量消息里区分出来。
+     */
+    public boolean mentionsBot() {
+        if (mentions == null || mentions.isEmpty()) {
+            return false;
+        }
+        for (MessageUser mention : mentions) {
+            if (mention == null) {
+                continue;
+            }
+            if (Boolean.TRUE.equals(mention.getIsYou())) {
+                return true;
+            }
+            // 兜底：个别推送不带 is_you，但被 @ 的对象是机器人且是单个 @
+            if (Boolean.TRUE.equals(mention.getBot()) && !"all".equals(mention.getScope())) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

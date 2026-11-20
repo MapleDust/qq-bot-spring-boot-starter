@@ -9,13 +9,13 @@
 
 ## 一、安装
 
-已发布到 Maven Central，坐标 `top.fcidd:qq-bot-spring-boot-starter`。
+已发布到 Maven Central，坐标 `top.fcidd:qq-bot-spring-boot-starter`。强烈推荐使用版本1.1.1修复了若干的bug，提升了框架的稳定性
 
 **Gradle（Kotlin DSL）**
 
 ```kotlin
 dependencies {
-    implementation("top.fcidd:qq-bot-spring-boot-starter:1.1.0")
+    implementation("top.fcidd:qq-bot-spring-boot-starter:1.1.1")
 }
 ```
 
@@ -23,7 +23,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'top.fcidd:qq-bot-spring-boot-starter:1.1.0'
+    implementation 'top.fcidd:qq-bot-spring-boot-starter:1.1.1'
 }
 ```
 
@@ -33,7 +33,7 @@ dependencies {
 <dependency>
     <groupId>top.fcidd</groupId>
     <artifactId>qq-bot-spring-boot-starter</artifactId>
-    <version>1.1.0</version>
+    <version>1.1.1</version>
 </dependency>
 ```
 
@@ -222,7 +222,51 @@ boolean receiveAll = groupApi.isReceiveAllMessages("群openid");
 
 对应接口 `GET /v2/groups/{group_openid}/bot_state`，`recv_msg_setting` 取值：`all`（群内全部消息）、`only_mention`（仅 @机器人）、`mention_and_context`（@机器人及上下文）。该接口部分机器人需要白名单权限，返回 `11253 应用无接口访问权限` 时只能靠第一步的开关状态判断。
 
-## 六、日志
+### 全量模式下「@机器人」的消息怎么区分
+
+开启全量后，群内**每一条**消息（包括 @机器人 的）都会以 `GROUP_MESSAGE_CREATE` 推送，事件名本身不再能说明“是否 @ 了机器人”。因此本 starter 的归类规则是：
+
+- `GROUP_AT_MESSAGE_CREATE` → 一定按「群聊@机器人」处理；
+- `GROUP_MESSAGE_CREATE` → 看 `mentions[].is_you`：为 `true` 即本条消息 @ 了本机器人，按「群聊@机器人」分发；否则按「群聊全量消息」分发。
+
+带来的效果：
+
+- @机器人 的 `/ping` 在全量模式下也会命中 `@GroupAtMessage("/ping")` 并自动回复（以前只认事件名，会误判为全量消息而“不回复”）；
+- 同一条消息若被平台同时以两种事件推送，只分发一次（按 `消息ID + 场景` 去重），不会重复回复、不会多消耗被动回复次数；
+- 若开头带 `<@xxx>` 这类 @机器人 标记，匹配指令前会先剥掉，保证 `/ping` 仍能匹配；
+- 日志同时给出判定结果与原始事件名，便于核对：
+
+```
+[群聊@机器人]（全量模式下收到，按@机器人处理） 事件类型=GROUP_MESSAGE_CREATE ... @成员=1人机器人(@我)
+```
+
+## 六、断线重连
+
+网关客户端内置自动重连，以下情况都会触发，不需要业务侧干预：
+
+| 触发条件 | 说明 |
+|---|---|
+| 连接结束 / 异常 | WebSocket 断开、握手失败、连接建立异常 |
+| 服务端 `op=7` RECONNECT | 平台主动要求重连，按需 Resume（保留 `session_id` 与 `seq`） |
+| 服务端 `op=9` INVALID_SESSION | 清空 `session_id` / `seq`，重新 Identify |
+| 心跳超时 | 心跳发出后 2 个间隔内没收到 `op=11` 应答，判定连接已死 |
+| 长时间无入站消息 | 超过 3 个心跳间隔没有任何入站报文，判定半开连接假死 |
+| 无活动连接 | 存活探测发现没有会话也没有排队中的重连，主动补一次 |
+
+- 退避策略：`qq.bot.reconnect-delay-ms`（默认 3000）起，按 3s → 6s → 12s … 指数翻倍，上限 60 秒；连上并收到 `READY` 后计数清零。
+- 存活探测每 5 秒执行一次，日志形如：
+
+```
+连接存活探测已启动，周期 5000 ms
+3000 ms 后执行第 1 次重连
+开始第 1 次重连
+收到 READY，session_id = ...，机器人已上线
+已 123750 ms 未收到任何网关消息（心跳间隔 41250 ms），判定连接已断开，强制重连
+```
+
+- 重连期间不会并发建连（有建连中标记与重连任务去重），因此不会出现两个连接同时在线把事件分流的情况；但仍建议只部署一个实例。
+
+## 七、日志
 
 收到三类消息事件时会打印明细（INFO）：
 
@@ -233,7 +277,68 @@ boolean receiveAll = groupApi.isReceiveAllMessages("群openid");
 
 附件 URL 带鉴权参数，所以日志只打印类型/文件名/尺寸/大小，不落 URL。
 
-## 七、其它
+## 八、日志（Log4j2）
+
+**写日志只需要在类上加一个 `@Log4j2`，不需要再写 `LoggerFactory`、不需要额外配置、不需要额外加依赖。**
+
+```java
+@Log4j2
+@Component
+public class MyBotListener {
+
+    @GroupAtMessage("/ping")
+    public String ping() {
+        log.info("收到 ping");        // 直接用 log，不用自己声明 Logger
+        return "pong";
+    }
+}
+```
+
+Lombok 会自动生成 `private static final org.apache.logging.log4j.Logger log = LogManager.getLogger(...)`，直接用 `log.info(...)` 即可。
+
+**不需要**自己声明 Logger，也**不需要**加日志依赖或写日志配置文件——Spring Boot 默认的日志栈里已有 `log4j-api` 与 `log4j-to-slf4j`，Log4j2 API 调用会被桥接到 Spring Boot 的日志实现正常输出（本项目实测 INFO 正常打印）。
+
+日志级别沿用 Spring Boot 标准配置：
+
+```yaml
+logging:
+  level:
+    top.fcidd.qqbot: info     # 想看更详细可调 debug
+```
+
+全部 11 个类都已使用 `@Log4j2`：`AccessTokenProvider`、`QQBotWebSocketClient`、`QQBotAutoConfiguration`、`QQBotStarterBootstrap`、`EventHandler`、`MessageEventLogger`、`MessageEventDispatcher`、`MessageHandlerRegistry`、`QQBotMessageSender`、`QQBotGroupApi`、`DemoBotListener`。
+
+输出样例：
+
+```
+2026-11-20T23:08:04.277+08:00  INFO 23952 --- [qq-bot-spring-boot-starter] [main] t.f.q.s.a.QQBotWebSocketClient : 连接存活探测已启动，周期 5000 ms
+2026-11-20T23:08:05.454+08:00  INFO 23952 --- [qq-bot-spring-boot-starter] [ctor-http-nio-3] t.f.q.s.a.AccessTokenProvider : access_token 获取成功，expires_in = 6211 s
+```
+
+补充：如果哪天把 Spring Boot 默认的 Logback 换成 Log4j2 原生实现（排除 `spring-boot-starter-logging` 并引入 `spring-boot-starter-log4j2`），那才需要额外提供一份 `log4j2.xml`——因为 Log4j2 无配置时默认只打 ERROR。当前项目不需要这一步。
+
+
+## 九、其它
 
 - 网关事件仍会通过 `ApplicationEventPublisher` 发布 `BotEvent`，需要原始事件时可 `@EventListener` 监听。
 - 内置 `DemoBotListener` 仅在 `qq.bot.demo-listener=true` 时启用：群内 `/ping` 回 `pong`，私聊回显，用于自测链路。
+
+## 十、稳定性修复记录
+
+本轮排查共修复 8 处缺陷，均已在代码中落地并通过 `gradlew build` 与实机跑通：
+
+| # | 问题 | 修复 |
+|---|---|---|
+| 1 | 建连/握手没有超时，连不上时永远卡在“建连中”，存活探测见到 `connecting=true` 就跳过，结果进程活着但一直离线 | 给 `HttpClient` 配 `CONNECT_TIMEOUT_MILLIS=10s`、`responseTimeout=20s`（握手超时） |
+| 2 | 单个事件处理抛异常会打断 `session.receive()` 流，被当成连接故障而整条断开 | `EventHandler.onRawEvent` 对“日志打印 / 注解分发 / 事件发布”三段分别 try-catch，单条事件出错只记 ERROR |
+| 3 | 调度器 `final` 且 `stop()` 后不重建，`start()` 无法二次启动；调度器关闭后还抛 `RejectedExecutionException` | 调度器改 `volatile` + 按需重建（守护线程 `qqbot-gateway-scheduler`）；`scheduleReconnect` / `startWatchdog` 捕获拒绝异常并撤销排队标记 |
+| 4 | `stop()` 未复位 `connecting` / `reconnectScheduled`，且调度器可能为 `null` | `stop()` 复位两个标记、判空后再 `shutdown()` |
+| 5 | 旧连接的收尾动作会把新连接的 `outbound` 与心跳清掉（重启 / 快速重连时踩到） | 每条连接独占一个出站队列，`doFinally` 用队列身份判断，“旧连接”直接忽略清理 |
+| 6 | `EventHandler` 对每个控制帧都打 INFO，心跳应答每 41 秒一条刷屏 | `op=0`（Dispatch）打 INFO，其余（Hello / 心跳应答）降为 DEBUG |
+| 7 | 被动回复 `msg_seq` 计数在超过 2000 条时整表 `clear()`，会把正在回复的 `msg_id` 序号归零，重复 `msg_seq` 会被平台去重丢消息 | 改 `LinkedHashMap` 有序淘汰最旧条目，并加 `synchronized` |
+| 8 | 应用关闭时没有关闭钩子，`stop()` 永不被调用，残留连接与调度线程 | `QQBotStarterBootstrap` 监听 `ContextClosedEvent`，调用 `webSocketClient.stop()` |
+
+另外两点易踩坑的行为变化：
+
+- 日志里不再出现 `收到网关事件 op=10 / op=11`（已降为 DEBUG），Hello 仍有独立的 `收到 Hello，heartbeat_interval = ...` INFO；想看控制帧把 `logging.level.top.fcidd.qqbot` 调成 `debug`。
+- 想覆盖默认的网关客户端或事件处理器，现在直接自己声明 `QQBotWebSocketClient` / `EventHandler` 类型的 Bean 即可，自动配置会退让（`@ConditionalOnMissingBean`）。

@@ -1,6 +1,6 @@
 package top.fcidd.qqbot.starter.api;
 
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import top.fcidd.qqbot.starter.autoconfigure.AccessTokenProvider;
@@ -15,7 +15,7 @@ import java.time.Duration;
  * 目前提供「获取机器人群内状态」，用于确认群主是否已给机器人开启
  * 「获取群内全部消息」（这是接收 GROUP_MESSAGE_CREATE 全量消息事件的前置条件）。
  */
-@Slf4j
+@Log4j2
 public class QQBotGroupApi {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(10);

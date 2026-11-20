@@ -1,6 +1,6 @@
 package top.fcidd.qqbot.starter.sender;
 
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -11,8 +11,9 @@ import top.fcidd.qqbot.starter.model.message.GroupMessagePayload;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -26,18 +27,19 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 同步方法内部会阻塞等待响应，请在业务线程（监听器已被派发到弹性线程池）或非 IO 线程中调用；
  * 响应式场景使用对应的 xxxAsync 方法。
  */
-@Slf4j
+@Log4j2
 public class QQBotMessageSender {
 
     private static final String BASE_URL = "https://api.sgroup.qq.com";
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
-    /** 被动回复的 msg_seq 需要按 msg_id 递增 */
+    /** 被动回复的 msg_seq 需要按 msg_id 递增；用有序表控制容量，避免长期运行内存无限增长 */
     private static final int MAX_TRACKED_MSG = 2000;
 
     private final AccessTokenProvider tokenProvider;
     private final QQBotProperties props;
     private final WebClient webClient;
-    private final Map<String, AtomicInteger> replySeq = new ConcurrentHashMap<>();
+    /** 按插入顺序淘汰最旧的 msg_id，不能整体 clear——那会把正在回复的 msg_id 的 seq 归零，重复 msg_seq 会被平台去重丢弃 */
+    private final Map<String, AtomicInteger> replySeq = new LinkedHashMap<>();
 
     public QQBotMessageSender(AccessTokenProvider tokenProvider, QQBotProperties props) {
         this.tokenProvider = tokenProvider;
@@ -176,10 +178,19 @@ public class QQBotMessageSender {
         }
     }
 
-    private int nextSeq(String messageId) {
-        if (replySeq.size() > MAX_TRACKED_MSG) {
-            replySeq.clear();
+    private synchronized int nextSeq(String messageId) {
+        AtomicInteger seq = replySeq.get(messageId);
+        if (seq == null) {
+            if (replySeq.size() >= MAX_TRACKED_MSG) {
+                Iterator<String> eldest = replySeq.keySet().iterator();
+                if (eldest.hasNext()) {
+                    eldest.next();
+                    eldest.remove();
+                }
+            }
+            seq = new AtomicInteger();
+            replySeq.put(messageId, seq);
         }
-        return replySeq.computeIfAbsent(messageId, key -> new AtomicInteger()).incrementAndGet();
+        return seq.incrementAndGet();
     }
 }
