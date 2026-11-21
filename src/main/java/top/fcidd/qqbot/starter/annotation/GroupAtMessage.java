@@ -14,13 +14,17 @@ import java.lang.annotation.Target;
  * <pre>{@code
  * // 匹配所有群 @消息
  * @GroupAtMessage
- * public void onAny(GroupMessagePayload msg) { ... }
+ * public void onAny(MessagePayload msg) { ... }
  *
  * // 只匹配 /help 指令
  * @GroupAtMessage("/help")
  * public String help() { return "帮助：..."; }
  * }</pre>
+ *
+ * @deprecated 三类消息场景已合并到 {@link QQBotMessage}，新代码请直接使用
+ * {@code @QQBotMessage}（默认同时覆盖群@、群全量、单聊），本注解仅为向后兼容保留。
  */
+@Deprecated
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented

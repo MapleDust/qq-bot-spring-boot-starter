@@ -6,8 +6,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import top.fcidd.qqbot.starter.autoconfigure.AccessTokenProvider;
 import top.fcidd.qqbot.starter.autoconfigure.QQBotProperties;
-import top.fcidd.qqbot.starter.model.message.C2CMessagePayload;
-import top.fcidd.qqbot.starter.model.message.GroupMessagePayload;
+import top.fcidd.qqbot.starter.model.message.MessagePayload;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -75,20 +74,49 @@ public class QQBotMessageSender {
         return block(sendGroupMessageAsync(groupOpenid, content, replyMessageId, msgSeq), "群聊");
     }
 
-    /** 回复群聊消息（自动带上 msg_id 与自增 msg_seq） */
-    public SendResult replyGroup(GroupMessagePayload message, String content) {
-        if (message == null || message.getGroupOpenid() == null || message.getId() == null) {
-            return SendResult.failure("群消息缺少 group_openid 或消息 ID，无法被动回复");
+    /**
+     * 回复一条消息（自动判断群聊 / 单聊），自动带上 msg_id 与自增 msg_seq。
+     * <p>
+     * 群聊走 {@code /v2/groups/{group_openid}/messages}，单聊走 {@code /v2/users/{user_openid}/messages}，
+     * 因此业务侧不需要再区分消息来自哪个场景。
+     */
+    public SendResult reply(MessagePayload message, String content) {
+        String invalid = validateReply(message);
+        if (invalid != null) {
+            return SendResult.failure(invalid);
         }
-        return sendGroupMessage(message.getGroupOpenid(), content, message.getId(), nextSeq(message.getId()));
+        if (message.isGroup()) {
+            return sendGroupMessage(message.getGroupOpenid(), content, message.getId(), nextSeq(message.getId()));
+        }
+        return sendC2CMessage(message.replyTargetOpenid(), content, message.getId(), nextSeq(message.getId()));
     }
 
-    /** 回复群聊消息（响应式） */
-    public Mono<SendResult> replyGroupAsync(GroupMessagePayload message, String content) {
-        if (message == null || message.getGroupOpenid() == null || message.getId() == null) {
-            return Mono.just(SendResult.failure("群消息缺少 group_openid 或消息 ID，无法被动回复"));
+    /** 回复一条消息（响应式版本） */
+    public Mono<SendResult> replyAsync(MessagePayload message, String content) {
+        String invalid = validateReply(message);
+        if (invalid != null) {
+            return Mono.just(SendResult.failure(invalid));
         }
-        return sendGroupMessageAsync(message.getGroupOpenid(), content, message.getId(), nextSeq(message.getId()));
+        if (message.isGroup()) {
+            return sendGroupMessageAsync(message.getGroupOpenid(), content, message.getId(), nextSeq(message.getId()));
+        }
+        return sendC2CMessageAsync(message.replyTargetOpenid(), content, message.getId(), nextSeq(message.getId()));
+    }
+
+    /** 校验能否被动回复，返回失败原因；可以回复时返回 null */
+    private String validateReply(MessagePayload message) {
+        if (message == null) {
+            return "消息为空，无法被动回复";
+        }
+        if (message.getId() == null || message.getId().isBlank()) {
+            return "消息缺少 msg_id，无法被动回复";
+        }
+        if (message.replyTargetOpenid() == null || message.replyTargetOpenid().isBlank()) {
+            return message.isGroup()
+                    ? "群消息缺少 group_openid，无法被动回复"
+                    : "单聊消息缺少 user_openid，无法被动回复";
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------ 单聊
@@ -112,24 +140,6 @@ public class QQBotMessageSender {
     /** 发送单聊消息，阻塞等待结果 */
     public SendResult sendC2CMessage(String userOpenid, String content, String replyMessageId, int msgSeq) {
         return block(sendC2CMessageAsync(userOpenid, content, replyMessageId, msgSeq), "单聊");
-    }
-
-    /** 回复单聊消息（自动带上 msg_id 与自增 msg_seq） */
-    public SendResult replyC2C(C2CMessagePayload message, String content) {
-        if (message == null || message.getAuthor() == null
-                || message.getAuthor().getUserOpenid() == null || message.getId() == null) {
-            return SendResult.failure("单聊消息缺少 user_openid 或消息 ID，无法被动回复");
-        }
-        return sendC2CMessage(message.getAuthor().getUserOpenid(), content, message.getId(), nextSeq(message.getId()));
-    }
-
-    /** 回复单聊消息（响应式） */
-    public Mono<SendResult> replyC2CAsync(C2CMessagePayload message, String content) {
-        if (message == null || message.getAuthor() == null
-                || message.getAuthor().getUserOpenid() == null || message.getId() == null) {
-            return Mono.just(SendResult.failure("单聊消息缺少 user_openid 或消息 ID，无法被动回复"));
-        }
-        return sendC2CMessageAsync(message.getAuthor().getUserOpenid(), content, message.getId(), nextSeq(message.getId()));
     }
 
     // ------------------------------------------------------------------ 内部实现

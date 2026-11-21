@@ -11,7 +11,11 @@ import java.lang.annotation.Target;
  * <p>
  * 需要群主在机器人资料页开启「接收所有消息」后平台才会推送该事件。
  * 只对 {@link QQBotListener} 类中的方法生效。
+ *
+ * @deprecated 三类消息场景已合并到 {@link QQBotMessage}，新代码请直接使用
+ * {@code @QQBotMessage}（默认同时覆盖群@、群全量、单聊），本注解仅为向后兼容保留。
  */
+@Deprecated
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented

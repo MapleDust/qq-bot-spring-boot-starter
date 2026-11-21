@@ -2,9 +2,8 @@ package top.fcidd.qqbot.starter.event;
 
 import lombok.extern.log4j.Log4j2;
 import top.fcidd.qqbot.starter.model.message.ArkData;
-import top.fcidd.qqbot.starter.model.message.C2CMessagePayload;
-import top.fcidd.qqbot.starter.model.message.GroupMessagePayload;
 import top.fcidd.qqbot.starter.model.message.MessageAttachment;
+import top.fcidd.qqbot.starter.model.message.MessagePayload;
 import top.fcidd.qqbot.starter.model.message.MessageUser;
 import top.fcidd.qqbot.starter.util.JsonUtils;
 
@@ -83,12 +82,12 @@ public class MessageEventLogger {
                 case GROUP_DEL_ROBOT -> formatGroupStatus(event, "机器人被移出群");
                 case GROUP_MSG_RECEIVE -> formatGroupStatus(event, "群消息接收开关：开启");
                 case GROUP_MSG_REJECT -> formatGroupStatus(event, "群消息接收开关：关闭");
-                case GROUP_AT_MESSAGE_CREATE -> formatGroupMessage(event, eventType,
-                        JsonUtils.convert(event.getD(), GroupMessagePayload.class));
-                case GROUP_MESSAGE_CREATE -> formatGroupMessage(event, eventType,
-                        JsonUtils.convert(event.getD(), GroupMessagePayload.class));
-                case C2C_MESSAGE_CREATE -> formatC2C(event,
-                        JsonUtils.convert(event.getD(), C2CMessagePayload.class));
+                case GROUP_AT_MESSAGE_CREATE -> formatMessage(event, eventType,
+                        JsonUtils.convert(event.getD(), MessagePayload.class));
+                case GROUP_MESSAGE_CREATE -> formatMessage(event, eventType,
+                        JsonUtils.convert(event.getD(), MessagePayload.class));
+                case C2C_MESSAGE_CREATE -> formatMessage(event, eventType,
+                        JsonUtils.convert(event.getD(), MessagePayload.class));
                 default -> null;
             };
         } catch (IllegalArgumentException ex) {
@@ -122,43 +121,32 @@ public class MessageEventLogger {
                 + " 群openid=" + groupOpenid;
     }
 
-    private String formatGroupMessage(BotEvent event, String eventType, GroupMessagePayload payload) {
+    /**
+     * 统一格式化三类消息事件。群聊/单聊由 {@link MessagePayload#isGroup()} 自动判断，
+     * 群聊里再按“是否 @ 机器人”区分「群聊@机器人」与「群聊全量消息」。
+     */
+    private String formatMessage(BotEvent event, String eventType, MessagePayload payload) {
         if (payload == null) {
             return null;
         }
-        // 全量模式下 @机器人 的消息也走 GROUP_MESSAGE_CREATE，因此场景要按“是否 @ 机器人”判断，
-        // 不能只看事件名，否则 @消息会被当成群全量消息
+        boolean c2c = C2C_MESSAGE_CREATE.equals(eventType);
+        boolean groupScene = !c2c && payload.isGroup();
         boolean fromAtEvent = GROUP_AT_MESSAGE_CREATE.equals(eventType);
-        boolean atBot = fromAtEvent || payload.mentionsBot();
-        String sceneLabel = atBot ? "群聊@机器人" : "群聊全量消息";
+        // 全量模式下 @机器人 的消息也走 GROUP_MESSAGE_CREATE，场景要按“是否 @ 机器人”判断
+        boolean atBot = fromAtEvent || (groupScene && payload.mentionsBot());
+        String sceneLabel = groupScene ? (atBot ? "群聊@机器人" : "群聊全量消息") : "单聊";
         String sceneNote = atBot && !fromAtEvent ? "（全量模式下收到，按@机器人处理）" : "";
         return "[" + sceneLabel + "]" + sceneNote
                 + " 事件类型=" + eventType
                 + " 事件ID=" + event.getId()
                 + " 序号s=" + event.getS()
                 + " 消息ID=" + payload.getId()
-                + " 群openid=" + payload.getGroupOpenid()
-                + " 发送者=" + describeUser(payload.getAuthor(), true)
+                + (groupScene ? " 群openid=" + payload.getGroupOpenid() : "")
+                + " 发送者=" + describeUser(payload.getAuthor(), groupScene)
                 + " 类型=" + describeMessageType(payload.getMessageType())
                 + " 内容=" + describeContent(payload.getContent())
                 + " 附件=" + describeAttachments(payload.getAttachments())
-                + " @成员=" + describeMentions(payload.getMentions())
-                + describeArk(payload.getArkData())
-                + " 时间=" + payload.getTimestamp();
-    }
-
-    private String formatC2C(BotEvent event, C2CMessagePayload payload) {
-        if (payload == null) {
-            return null;
-        }
-        return "[单聊]"
-                + " 事件ID=" + event.getId()
-                + " 序号s=" + event.getS()
-                + " 消息ID=" + payload.getId()
-                + " 发送者=" + describeUser(payload.getAuthor(), false)
-                + " 类型=" + describeMessageType(payload.getMessageType())
-                + " 内容=" + describeContent(payload.getContent())
-                + " 附件=" + describeAttachments(payload.getAttachments())
+                + (groupScene ? " @成员=" + describeMentions(payload.getMentions()) : "")
                 + describeArk(payload.getArkData())
                 + " 时间=" + payload.getTimestamp();
     }

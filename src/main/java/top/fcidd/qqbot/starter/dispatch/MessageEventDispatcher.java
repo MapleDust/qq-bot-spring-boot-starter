@@ -5,8 +5,7 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import top.fcidd.qqbot.starter.event.BotEvent;
 import top.fcidd.qqbot.starter.event.MessageEventLogger;
-import top.fcidd.qqbot.starter.model.message.C2CMessagePayload;
-import top.fcidd.qqbot.starter.model.message.GroupMessagePayload;
+import top.fcidd.qqbot.starter.model.message.MessagePayload;
 import top.fcidd.qqbot.starter.sender.QQBotMessageSender;
 import top.fcidd.qqbot.starter.util.JsonUtils;
 
@@ -59,9 +58,9 @@ public class MessageEventDispatcher {
     }
 
     private void dispatchGroupEvent(BotEvent event, boolean fromAtEvent) {
-        GroupMessagePayload payload;
+        MessagePayload payload;
         try {
-            payload = JsonUtils.convert(event.getD(), GroupMessagePayload.class);
+            payload = JsonUtils.convert(event.getD(), MessagePayload.class);
         } catch (IllegalArgumentException ex) {
             log.warn("解析群消息事件失败，事件类型={}", event.getT(), ex);
             return;
@@ -132,9 +131,9 @@ public class MessageEventDispatcher {
     }
 
     private void dispatchC2CEvent(BotEvent event) {
-        C2CMessagePayload payload;
+        MessagePayload payload;
         try {
-            payload = JsonUtils.convert(event.getD(), C2CMessagePayload.class);
+            payload = JsonUtils.convert(event.getD(), MessagePayload.class);
         } catch (IllegalArgumentException ex) {
             log.warn("解析单聊消息事件失败", ex);
             return;
@@ -182,7 +181,7 @@ public class MessageEventDispatcher {
         for (int i = 0; i < parameterTypes.length; i++) {
             Class<?> parameterType = parameterTypes[i];
             if (parameterType.isInstance(payload)) {
-                // GroupMessagePayload / C2CMessagePayload / Object
+                // MessagePayload / Object
                 args[i] = payload;
             } else if (BotEvent.class.isAssignableFrom(parameterType)) {
                 args[i] = event;
@@ -203,10 +202,9 @@ public class MessageEventDispatcher {
             log.warn("未配置 QQBotMessageSender，跳过自动回复：{}", reply);
             return;
         }
-        if (payload instanceof GroupMessagePayload groupMessage) {
-            sender.replyGroup(groupMessage, reply);
-        } else if (payload instanceof C2CMessagePayload c2cMessage) {
-            sender.replyC2C(c2cMessage, reply);
+        if (payload instanceof MessagePayload message) {
+            // 群聊 / 单聊由 MessagePayload.isGroup() 自动判断
+            sender.reply(message, reply);
         }
     }
 }

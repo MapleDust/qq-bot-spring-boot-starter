@@ -80,44 +80,54 @@ qq:
 前提：启动类已添加 `@EnableQQBot`。
 
 ```java
+import top.fcidd.qqbot.starter.dispatch.MessageEventType;
+
 @QQBotListener                       // 标记监听器类，会被组件扫描注册
 public class MyBotListener {
 
-    // 群内 @机器人 发送 /ping → 回复 pong（返回值作为被动回复自动发送）
-    @GroupAtMessage("/ping")
+    // 群@、群全量、单聊三类场景都回复（默认三类场景全部生效）
+    @QQBotMessage("/ping")
     public String ping() {
         return "pong";
     }
 
     // 群内 @机器人 发送 /weather 合肥 → 参数为 "合肥"
-    @GroupAtMessage("/weather")
-    public String weather(String args, GroupMessagePayload message) {
+    @QQBotMessage(value = "/weather", type = {MessageEventType.GROUP_AT, MessageEventType.GROUP_MESSAGE})
+    public String weather(String args, MessagePayload message) {
         return args + " 的天气：晴，群 " + message.getGroupOpenid();
     }
 
-    // 监听群内全部 @机器人 消息（不区分指令）
-    @GroupAtMessage
-    public void onAnyGroupAt(GroupMessagePayload message) {
-        // 也可以注入 QQBotMessageSender 主动发送
-    }
-
-    // 单聊指令
-    @C2CMessage("/help")
-    public String help(C2CMessagePayload message) {
+    // 只监听单聊
+    @QQBotMessage(value = "/help", type = MessageEventType.C2C)
+    public String help(MessagePayload message) {
         return "发送 /echo 内容 可以原样回显";
     }
 
-    // 群聊全量消息（需群主开启「接收所有消息」）
-    @GroupMessage("/report")
-    public void report(GroupMessagePayload message) { }
+    // 只监听群聊全量消息（需群主开启「接收所有消息」）
+    @QQBotMessage(value = "/report", type = MessageEventType.GROUP_MESSAGE)
+    public void report(MessagePayload message) { }
 }
 ```
+
+`@QQBotMessage` 属性：
+
+| 属性 | 类型 | 默认值 | 含义 |
+|---|---|---|---|
+| `value` | `String` | `""` | 指令前缀，空字符串表示匹配该场景下的全部消息 |
+| `ignoreCase` | `boolean` | `true` | 指令匹配是否忽略大小写 |
+| `type` | `MessageEventType[]` | `{GROUP_AT, GROUP_MESSAGE, C2C}` | 生效的消息场景，可多选；重复声明的场景会自动去重 |
+
+- 默认 `type` 包含三类场景，等于把原来 `@GroupAtMessage`、`@GroupMessage`、`@C2CMessage` 的功能合并到了一个注解上。
+- 只监听部分场景时用 `type` 限定，例如 `type = MessageEventType.C2C`、`type = {GROUP_AT, GROUP_MESSAGE}`。
+- 方法参数统一为 `MessagePayload`（群聊/单聊字段超集），三类场景通用；群聊还是单聊用 `message.isGroup()` / `message.isC2C()` / `message.sceneLabel()` 自动判断，不需要再声明两个类型。
+
+**旧注解兼容**：`@GroupAtMessage`、`@GroupMessage`、`@C2CMessage` 已标记为 `@Deprecated`，仍可正常使用；同一个方法上同时标注多个旧注解时，现在会按各注解声明的场景全部注册（以前是互斥的 `if/else`，只会注册其中一个）。
 
 ### 方法参数（可选，最多 4 个，类型任意组合）
 
 | 参数类型 | 含义 |
 |---|---|
-| `GroupMessagePayload` / `C2CMessagePayload` / `Object` | 消息事件体（消息 ID、发送者、内容、附件等） |
+| `MessagePayload` / `Object` | 统一消息事件体（消息 ID、发送者、内容、群 openid、附件、mentions 等），群聊/单聊自动判断 |
 | `BotEvent` | 原始网关事件（含 `op`、`t`、`s`、`d`） |
 | `QQBotMessageSender` | 消息发送器，可直接调用 |
 | `String` | 指令之后的参数（未配置指令时为整条消息内容，已去首尾空白） |
@@ -147,13 +157,9 @@ public class MyService {
 
     public MyService(QQBotMessageSender sender) { this.sender = sender; }
 
-    // 被动回复：自动带 msg_id 并自增 msg_seq，是最稳的回复方式
-    public void reply(GroupMessagePayload message) {
-        sender.replyGroup(message, "收到你的消息");
-    }
-
-    public void replyPrivate(C2CMessagePayload message) {
-        sender.replyC2C(message, "你好");
+    // 被动回复：自动判断群聊/单聊，自动带 msg_id 并自增 msg_seq
+    public void reply(MessagePayload message) {
+        sender.reply(message, "收到你的消息");   // 群消息回群，单聊回用户
     }
 
     // 主动消息（受平台频控，用户可关闭接收）
@@ -231,7 +237,7 @@ boolean receiveAll = groupApi.isReceiveAllMessages("群openid");
 
 带来的效果：
 
-- @机器人 的 `/ping` 在全量模式下也会命中 `@GroupAtMessage("/ping")` 并自动回复（以前只认事件名，会误判为全量消息而“不回复”）；
+- @机器人 的 `/ping` 在全量模式下也会命中 `@QQBotMessage("/ping")` 并自动回复（以前只认事件名，会误判为全量消息而“不回复”）；
 - 同一条消息若被平台同时以两种事件推送，只分发一次（按 `消息ID + 场景` 去重），不会重复回复、不会多消耗被动回复次数；
 - 若开头带 `<@xxx>` 这类 @机器人 标记，匹配指令前会先剥掉，保证 `/ping` 仍能匹配；
 - 日志同时给出判定结果与原始事件名，便于核对：
@@ -286,7 +292,7 @@ boolean receiveAll = groupApi.isReceiveAllMessages("群openid");
 @Component
 public class MyBotListener {
 
-    @GroupAtMessage("/ping")
+    @QQBotMessage("/ping")
     public String ping() {
         log.info("收到 ping");        // 直接用 log，不用自己声明 Logger
         return "pong";
@@ -342,3 +348,5 @@ logging:
 
 - 日志里不再出现 `收到网关事件 op=10 / op=11`（已降为 DEBUG），Hello 仍有独立的 `收到 Hello，heartbeat_interval = ...` INFO；想看控制帧把 `logging.level.top.fcidd.qqbot` 调成 `debug`。
 - 想覆盖默认的网关客户端或事件处理器，现在直接自己声明 `QQBotWebSocketClient` / `EventHandler` 类型的 Bean 即可，自动配置会退让（`@ConditionalOnMissingBean`）。
+
+另外，消息体已合并：原 `GroupMessagePayload` 与 `C2CMessagePayload` 统一为 `MessagePayload`（字段超集），群聊/单聊由 `isGroup()` / `isC2C()` / `sceneLabel()` 自动判断；被动回复统一用 `sender.reply(message, content)` / `sender.replyAsync(...)`，会按场景自动选择群聊或单聊接口。原 `replyGroup` / `replyC2C` 已移除。
